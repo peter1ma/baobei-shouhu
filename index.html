@@ -144,7 +144,7 @@ async function dbGet(k){
   return row.v!=null?String(row.v):(row.V!=null?String(row.V):null);
 }
 async function dbPut(k,v){await sqlite.run({database:DB,statement:"INSERT OR REPLACE INTO kv (k,v) VALUES (?,?);",values:[k,v],readonly:false})}
-const save=()=>{if(!booting)fresh=false;const j=JSON.stringify(S);lsSet(LS,j);if(dbReady)dbPut("state",j).catch(()=>{});else if(idb)idbPutQueued("state",j);if(!save.asked&&navigator.storage&&navigator.storage.persist){save.asked=true;navigator.storage.persist().catch(()=>{})}keepSnap();clearTimeout(save.h);save.h=setTimeout(()=>scheduleReminders(),400)};
+const save=()=>{if(!booting)fresh=false;const j=JSON.stringify(S);const ok=lsSet(LS,j);if(dbReady){dbPut("state",j).catch(()=>{});}else if(idb){idbPutQueued("state",j);}else if(!ok){return false}if(!save.asked&&navigator.storage&&navigator.storage.persist){save.asked=true;navigator.storage.persist().catch(()=>{})}keepSnap();clearTimeout(save.h);save.h=setTimeout(()=>scheduleReminders(),400);return true};
 const saveF=()=>{const j=JSON.stringify(F);const ok=lsSet(LSF,j);if(dbReady){dbPut("food",j).catch(()=>{});return true}if(idb){idbPutQueued("food",j);return true}if(!ok){alert("本机存储空间不足，照片未能保存，可以先删除较早的记录。");return false}return true};
 const TL=d=>{d=d||today();let l=S.logs.find(x=>x.d==d);if(!l){l={d};S.logs.push(l)}return l};
 const proOf=d=>{const t=F.filter(x=>x.d==d).reduce((a,b)=>a+(+b.pro||0),0);if(t)return Math.round(t);const l=S.logs.find(x=>x.d==d);return l&&l.pro?l.pro:0};
@@ -192,7 +192,7 @@ function closeSheet(){const s=$("sh");if(s)s.remove()}
 function chart(arr,key){if(!arr.length)return '<p class="sub">还没有数据，点右下方“＋”添加。</p>';
  const W=320,H=150,pl=30,pr=14,pt=16,pb=26,vs=arr.map(x=>x[key]),mx=Math.max(...vs)*1.15||1,mn=Math.min(0,...vs),X=i=>pl+(arr.length==1?(W-pl-pr)/2:i*(W-pl-pr)/(arr.length-1)),Y=v=>pt+(H-pt-pb)*(1-(v-mn)/(mx-mn||1)),pts=arr.map((x,i)=>X(i)+","+Y(x[key])).join(" ");
  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"><line x1="${pl}" y1="${H-pb}" x2="${W-pr}" y2="${H-pb}" stroke="var(--line)"/><text x="2" y="${pt+4}">${+mx.toFixed(2)}</text><text x="2" y="${H-pb}">${mn}</text>${arr.length>1?`<polygon points="${X(0)},${H-pb} ${pts} ${X(arr.length-1)},${H-pb}" fill="var(--rose)" opacity=".1"/>`:""}<polyline points="${pts}" fill="none" stroke="var(--rose)" stroke-width="2.4" stroke-linejoin="round"/>${arr.map((x,i)=>`<circle cx="${X(i)}" cy="${Y(x[key])}" r="4" fill="var(--card)" stroke="var(--rose)" stroke-width="2"/><text x="${X(i)}" y="${Y(x[key])-8}" text-anchor="middle">${x[key]}</text><text x="${X(i)}" y="${H-10}" text-anchor="middle">${x.d.slice(5)}</text>`).join("")}</svg>`}
-let tab="today",vd=today(),seg="weight",selD=today(),cm=0,labk="血红蛋白",dp={type:"blood"},acc=new Set(["med","pg","dose","bl"]),mp={sel:[],img:[],type:null,txt:"",pro:0},nd={kind:"日常",title:"",text:"",imgs:[]},wv=0,mc="其他",medId=null,rfOn=i=>S.risk[i]===true,kickN=10,bloodSel=["血红蛋白","空腹血糖","TSH","铁蛋白"],ctxRun=null,ctxT0=0;
+let tab="today",vd=today(),seg="weight",selD=today(),cm=0,labk="血红蛋白",dp={type:"blood"},acc=new Set(["med","pg","dose","bl"]),mp={sel:[],img:[],type:null,txt:"",pro:0},nd={kind:"日常",title:"",text:"",imgs:[]},imgBusy=false,wv=0,mc="其他",medId=null,rfOn=i=>S.risk[i]===true,kickN=10,bloodSel=["血红蛋白","空腹血糖","TSH","铁蛋白"],ctxRun=null,ctxT0=0;
 function standalone(){return window.navigator.standalone===true||window.matchMedia("(display-mode: standalone)").matches}
 let offlineOK=false;
 function securePage(){return location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"}
@@ -232,9 +232,18 @@ function sheetMeal(){if(!mp.type)mp.type=mealByHour();
  <div class="row" style="margin-top:10px"><span class="sub">蛋白质约</span><input type="number" inputmode="decimal" style="width:90px" value="${mp.pro||""}" oninput="mp.pro=this.value"><span class="sub">克（自动估算，可改）</span></div>
  <button class="btn big" onclick="saveMeal()">保存</button>`)}
 function togF(n){const i=mp.sel.indexOf(n);i<0?mp.sel.push(n):mp.sel.splice(i,1);mp.pro=mp.sel.reduce((a,k)=>a+FOODS.find(f=>f[0]==k)[1],0);sheetMeal()}
-function comp(f){return new Promise(res=>{const r=new FileReader;r.onload=()=>{const im=new Image;im.onload=()=>{const k=Math.min(1,720/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext("2d").drawImage(im,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.62))};im.onerror=()=>res(null);im.src=r.result};r.onerror=()=>res(null);r.readAsDataURL(f)})}
-async function pickImg(inp){for(const f of [...inp.files].slice(0,3-mp.img.length)){const d=await comp(f);if(d)mp.img.push(d)}sheetMeal()}
-function saveMeal(){if(!mp.sel.length&&!mp.txt.trim()&&!mp.img.length){toast("先选点吃了什么或拍张照");return}
+function comp(f){return new Promise(res=>{
+  const finish=(im,raw)=>{try{const k=Math.min(1,720/Math.max(im.width||1,im.height||1)),c=document.createElement("canvas");c.width=Math.max(1,Math.round((im.width||1)*k));c.height=Math.max(1,Math.round((im.height||1)*k));c.getContext("2d").drawImage(im,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.62))}catch(e){res(typeof raw==="string"&&raw.indexOf("data:image")==0?raw:null)}};
+  if(typeof createImageBitmap==="function"){
+    createImageBitmap(f).then(bmp=>{finish(bmp);bmp.close&&bmp.close()}).catch(()=>{
+      const r=new FileReader;r.onload=()=>{const im=new Image;im.onload=()=>finish(im,r.result);im.onerror=()=>res(null);im.src=r.result};r.onerror=()=>res(null);r.readAsDataURL(f);
+    });
+    return;
+  }
+  const r=new FileReader;r.onload=()=>{const im=new Image;im.onload=()=>finish(im,r.result);im.onerror=()=>res(null);im.src=r.result};r.onerror=()=>res(null);r.readAsDataURL(f);
+})}
+async function pickImg(inp){const files=[...inp.files].slice(0,3-mp.img.length);inp.value="";if(!files.length)return;imgBusy=true;let fail=0;for(const f of files){const d=await comp(f);if(d)mp.img.push(d);else fail++}imgBusy=false;sheetMeal();if(fail)toast(fail+" 张照片读不出来，请再拍一次或从相册选 JPG/PNG")}
+function saveMeal(){if(imgBusy){toast("照片还在处理，稍等一下");return}if(!mp.sel.length&&!mp.txt.trim()&&!mp.img.length){toast("先选点吃了什么或拍张照");return}
  const d=ctxDay();F.push({id:Date.now(),d,t:d==today()?nowT():"12:00",meal:mp.type,txt:mp.txt.trim(),foods:mp.sel,pro:+mp.pro||0,imgs:mp.img});if(!saveF()){F.pop();return}
  mp={sel:[],img:[],type:null,txt:"",pro:0};closeSheet();toast("已记录 🍽");render(true)}
 function sheetState(){const l=TL(ctxDay()),er=(t,k)=>`<p class="lab">${t}</p><div class="emo">${EMO.map((e,i)=>`<span class="${l[k]==(i+1)*2?"on":""}" onclick="setEmo('${k}',${i})">${e}</span>`).join("")}</div>`;
@@ -378,8 +387,8 @@ V.diary=()=>{const strip=Array.from({length:14},(_,i)=>addDays(i-13)),l=S.logs.f
 function noteCards(list){return (list||[]).map(x=>`<div class="card"><div class="row"><span class="tag">${esc(x.kind||"日常")}</span><span class="sub">${esc(x.t||"")}</span><button class="btn ghost sm sp" onclick="delNote(${x.id})">删除</button></div>${x.title?`<h2 style="margin:8px 0 0">${esc(x.title)}</h2>`:""}${x.text?`<p style="margin:8px 0 0;white-space:pre-wrap">${esc(x.text)}</p>`:""}${x.imgs&&x.imgs.length?`<div class="thumbs">${x.imgs.map(i=>`<img src="${i}" onclick="showImg(this.src)">`).join("")}</div>`:""}</div>`).join("")}
 function noteToday(){const list=(S.notes||[]).filter(x=>x.d==today());return `<div class="card"><div class="row"><h2 style="margin:0">今天的事</h2><button class="btn soft sp" onclick="sheetNote()">＋ 记下</button></div>${list.length?noteCards(list):'<p class="sub" style="margin:0">写下今天发生的事，或放入化验单、超声报告的截图。照片和文字按这一天归档，只存在这台手机里。</p>'}</div>`}
 function sheetNote(){const K=["日常","产检","化验报告","其他"];sheet("记今天的事",`${dayTag()}<p class="sub">写清楚当天发生了什么。化验单、超声或聊天记录，用截图放进来即可。</p><div class="chips">${K.map(k=>`<span class="chip ${nd.kind==k?"on":""}" onclick="nd.kind='${k}';sheetNote()">${k}</span>`).join("")}</div><label class="l">标题</label><input value="${esc(nd.title)}" placeholder="例如 大排畸报告、今天的胎动" oninput="nd.title=this.value"><label class="l">描述</label><textarea rows="4" placeholder="医生原话、报告上的结论，或今天发生的事" oninput="nd.text=this.value">${esc(nd.text)}</textarea><label class="photo" style="margin-top:12px"><input type="file" accept="image/*" multiple onchange="pickNoteImg(this)">📷 拍照、相册或截图</label><div class="thumbs">${nd.imgs.map((s,i)=>`<img src="${s}" onclick="nd.imgs.splice(${i},1);sheetNote()">`).join("")}</div><p class="sub">最多 6 张。点缩略图可去掉。保存后到「记录」里按日期回看。</p><button class="btn big" onclick="saveNote()">保存到这一天</button>`)}
-async function pickNoteImg(inp){for(const f of [...inp.files].slice(0,6-nd.imgs.length)){const d=await comp(f);if(d)nd.imgs.push(d)}sheetNote()}
-function saveNote(){const title=(nd.title||"").trim(),text=(nd.text||"").trim();if(!title&&!text&&!nd.imgs.length){toast("写一点描述，或放一张截图");return}S.notes=S.notes||[];S.notes.push({id:Date.now(),d:ctxDay(),t:ctxDay()==today()?nowT():"12:00",kind:nd.kind||"日常",title,text,imgs:nd.imgs.slice()});nd={kind:"日常",title:"",text:"",imgs:[]};save();closeSheet();toast("已按日期归档");render(true)}
+async function pickNoteImg(inp){const files=[...inp.files].slice(0,6-nd.imgs.length);inp.value="";if(!files.length)return;imgBusy=true;let fail=0;for(const f of files){const d=await comp(f);if(d)nd.imgs.push(d);else fail++}imgBusy=false;sheetNote();if(fail)toast(fail+" 张照片读不出来，请再拍一次或从相册选 JPG/PNG")}
+function saveNote(){if(imgBusy){toast("照片还在处理，稍等一下");return}const title=(nd.title||"").trim(),text=(nd.text||"").trim();if(!title&&!text&&!nd.imgs.length){toast("写一点描述，或放一张截图");return}S.notes=S.notes||[];S.notes.push({id:Date.now(),d:ctxDay(),t:ctxDay()==today()?nowT():"12:00",kind:nd.kind||"日常",title,text,imgs:nd.imgs.slice()});if(!save()){S.notes.pop();alert("本机存储空间不足，照片未能保存，可以先删除较早的记录。");return}nd={kind:"日常",title:"",text:"",imgs:[]};closeSheet();toast("已按日期归档");render(true)}
 function delNote(id){if(!confirm("删除这条记事和里面的照片？"))return;S.notes=(S.notes||[]).filter(x=>x.id!=id);save();render(true)}
 function delFood(id){if(confirm("删除这一餐？")){F=F.filter(x=>x.id!=id);saveF();render(true)}}
 function showImg(s){const d=document.createElement("div");d.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:40";d.innerHTML=`<img src="${s}" style="max-width:96%;max-height:90%;border-radius:14px">`;d.onclick=()=>d.remove();document.body.appendChild(d)}
@@ -517,7 +526,7 @@ function hydrate(stateRaw,foodRaw){
   scheduleReminders();
   if(securePage()&&"serviceWorker"in navigator){
     navigator.serviceWorker.register("sw.js").then(()=>navigator.serviceWorker.ready).then(async()=>{
-      const cache=await caches.open("baobei-v6");
+      const cache=await caches.open("baobei-v7");
       let hit=await cache.match("./")||await cache.match("index.html");
       if(!hit){
         const res=await fetch("index.html",{cache:"reload"});
