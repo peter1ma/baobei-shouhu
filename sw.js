@@ -1,4 +1,4 @@
-const CACHE = 'baobei-v8';
+const CACHE = 'baobei-v9';
 const APP = "./index.html";
 const ASSETS = ["./", APP, "./manifest.webmanifest", "./icon-180.png", "./icon-192.png", "./icon-512.png", "./sw.js"];
 

@@ -72,6 +72,8 @@ pre{white-space:pre-wrap;font-family:inherit;font-size:13.5px;margin:0;backgroun
 .cal div.c{position:relative;height:40px;line-height:40px;border-radius:12px;background:var(--bg);cursor:pointer;border:2px solid transparent}
 .cal .p{background:var(--rose2);color:var(--rose);font-weight:700}.cal .pp{border-color:var(--rose);border-style:dashed}.cal .f{background:var(--sage2)}.cal .o{background:var(--sage);color:#fff}.cal .sel{outline:2px solid var(--ink)}
 .cal .ev::after{content:"";position:absolute;bottom:4px;left:50%;margin-left:-2.5px;width:5px;height:5px;border-radius:50%;background:var(--amb)}
+.cal .log::after{content:"";position:absolute;bottom:4px;left:50%;margin-left:-2.5px;width:5px;height:5px;border-radius:50%;background:var(--rose)}
+.cal .log.ev::after{box-shadow:6px 0 0 var(--amb)}
 .lg{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--sub);margin-top:10px}.lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:3px}
 .ts{position:fixed;left:50%;bottom:104px;transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:9px 18px;border-radius:99px;font-size:14px;opacity:0;transition:.25s;z-index:30;pointer-events:none}.ts.on{opacity:.95;transform:translate(-50%,0)}
 svg text{fill:var(--sub);font-size:9px}
@@ -192,7 +194,7 @@ function closeSheet(){const s=$("sh");if(s)s.remove()}
 function chart(arr,key){if(!arr.length)return '<p class="sub">还没有数据，点右下方“＋”添加。</p>';
  const W=320,H=150,pl=30,pr=14,pt=16,pb=26,vs=arr.map(x=>x[key]),mx=Math.max(...vs)*1.15||1,mn=Math.min(0,...vs),X=i=>pl+(arr.length==1?(W-pl-pr)/2:i*(W-pl-pr)/(arr.length-1)),Y=v=>pt+(H-pt-pb)*(1-(v-mn)/(mx-mn||1)),pts=arr.map((x,i)=>X(i)+","+Y(x[key])).join(" ");
  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"><line x1="${pl}" y1="${H-pb}" x2="${W-pr}" y2="${H-pb}" stroke="var(--line)"/><text x="2" y="${pt+4}">${+mx.toFixed(2)}</text><text x="2" y="${H-pb}">${mn}</text>${arr.length>1?`<polygon points="${X(0)},${H-pb} ${pts} ${X(arr.length-1)},${H-pb}" fill="var(--rose)" opacity=".1"/>`:""}<polyline points="${pts}" fill="none" stroke="var(--rose)" stroke-width="2.4" stroke-linejoin="round"/>${arr.map((x,i)=>`<circle cx="${X(i)}" cy="${Y(x[key])}" r="4" fill="var(--card)" stroke="var(--rose)" stroke-width="2"/><text x="${X(i)}" y="${Y(x[key])-8}" text-anchor="middle">${x[key]}</text><text x="${X(i)}" y="${H-10}" text-anchor="middle">${x.d.slice(5)}</text>`).join("")}</svg>`}
-let tab="today",vd=today(),seg="weight",selD=today(),cm=0,labk="血红蛋白",dp={type:"blood"},acc=new Set(["med","pg","dose","bl"]),mp={sel:[],img:[],type:null,txt:"",pro:0},nd={kind:"日常",title:"",text:"",imgs:[]},imgBusy=false,wv=0,mc="其他",medId=null,rfOn=i=>S.risk[i]===true,kickN=10,bloodSel=["血红蛋白","空腹血糖","TSH","铁蛋白"],ctxRun=null,ctxT0=0;
+let tab="today",vd=today(),seg="weight",selD=today(),cm=0,diaryCm=0,labk="血红蛋白",dp={type:"blood"},acc=new Set(["med","pg","dose","bl"]),mp={sel:[],img:[],type:null,txt:"",pro:0},nd={kind:"日常",title:"",text:"",imgs:[]},imgBusy=false,wv=0,mc="其他",medId=null,rfOn=i=>S.risk[i]===true,kickN=10,bloodSel=["血红蛋白","空腹血糖","TSH","铁蛋白"],ctxRun=null,ctxT0=0;
 function standalone(){return window.navigator.standalone===true||window.matchMedia("(display-mode: standalone)").matches}
 let offlineOK=false;
 function securePage(){return location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"}
@@ -203,7 +205,14 @@ function installCard(){
   return `<div class="card" style="background:var(--rose2)"><h2>装到主屏幕后即可离线</h2><p style="margin:0"><b>${state}</b></p><ol style="margin:8px 0 0;padding-left:18px"><li>用 Safari 打开本页，等到上面变成「已可离线」</li><li>点底部分享 → 添加到主屏幕 → 添加</li><li>从主屏幕图标进入后再记录</li></ol><p class="sub">装好后可以关掉电脑，开飞行模式也能打开。请从主屏幕图标打开后再记，记录只存在这台 iPhone 里。</p></div>`
 }
 function render(keep){$("app").innerHTML=V[tab]();$("nav").innerHTML=[["today","☀️","今天"],["diary","📖","记录"],["","",""],["trend","📈","趋势"],["me","👶","我的"]].map(t=>t[0]?`<button class="${t[0]==tab?"on":""}" onclick="go('${t[0]}')"><b>${t[1]}</b>${t[2]}</button>`:`<button class="fab" onclick="menu()" aria-label="快速记录">＋</button>`).join("");if(!keep)window.scrollTo(0,0);const st=$("st");if(st)st.scrollLeft=st.scrollWidth}
-const go=t=>{tab=t;vd=today();render()};
+const go=t=>{tab=t;if(t==="diary"){vd=today();syncDiaryCm()}else vd=today();render()};
+function syncDiaryCm(){const n=new Date(),[y,m]=vd.split("-").map(Number);diaryCm=(y-n.getFullYear())*12+(m-1-n.getMonth())}
+function loggedDays(){const s=new Set(),add=x=>{if(x&&x.d)s.add(x.d)};
+ (S.notes||[]).forEach(add);F.forEach(add);S.kicks.forEach(add);S.bp.forEach(add);S.doses.forEach(add);S.bloods.forEach(add);(S.ctxs||[]).forEach(add);S.exams.forEach(add);
+ S.logs.forEach(x=>{if(x.w||x.mood!=null||x.en!=null||x.ap!=null||x.pain!=null||x.sys||x.wat||x.fh||x.note||(x.sym&&x.sym.length))s.add(x.d)});
+ S.meds.forEach(m=>Object.keys(m.done||{}).forEach(d=>s.add(d)));return s}
+function pickDiary(d){vd=d;syncDiaryCm();render(true)}
+function diaryMonth(delta){diaryCm+=delta;const n=new Date(),m0=new Date(Date.UTC(n.getFullYear(),n.getMonth()+diaryCm,1)),ym=m0.getUTCFullYear()+"-"+String(m0.getUTCMonth()+1).padStart(2,"0");if(!vd.startsWith(ym)){const dim=new Date(Date.UTC(m0.getUTCFullYear(),m0.getUTCMonth()+1,0)).getUTCDate(),day=Math.min(+vd.slice(8),dim);vd=ym+"-"+String(day).padStart(2,"0")}render(true)}
 const V={};
 V.today=()=>{const T=today(),A=alerts(),lv=A.some(a=>a[0]=="alert")?"alert":A.length?"warn":"ok",l=S.logs.find(x=>x.d==T)||{},h=new Date().getHours(),now=nowT(),ph=preg(),ap=S.appt.filter(a=>a.d>=T).sort((a,b)=>a.d<b.d?-1:1)[0];
  const timed=S.meds.filter(m=>m.at).sort((a,b)=>a.at<b.at?-1:1),other=S.meds.filter(m=>!m.at),dn=S.meds.filter(m=>m.done[T]).length,pro=proOf(T),ref=refPro(),wat=l.wat||0,kk=S.kicks.filter(x=>x.d==T).reduce((a,b)=>a+(+b.n||0),0);
@@ -386,16 +395,33 @@ async function exportPdf(){
  toast("正在从 SQLite 生成 PDF…");
  try{await pdf.export({title:"宝贝守护记录报告",text});toast("已生成 PDF，请选择保存或分享")}catch(e){toast("导出失败："+(e&&e.message||"请重试"))}
 }
-V.diary=()=>{const strip=Array.from({length:14},(_,i)=>addDays(i-13)),l=S.logs.find(x=>x.d==vd)||{},meals=F.filter(x=>x.d==vd).sort((a,b)=>a.t<b.t?-1:1),taken=S.meds.filter(m=>m.done[vd]),kk=S.kicks.filter(x=>x.d==vd),notes=(S.notes||[]).filter(x=>x.d==vd);
- return `<div class="hd"><h1>记录</h1><p>${vd==today()?"今天":vd}</p></div><div class="strip" id="st">${strip.map(d=>`<div class="dy ${d==vd?"on":""}" onclick="vd='${d}';render(true)">周${WK[D(d).getUTCDay()]}<b>${+d.slice(8)}</b></div>`).join("")}</div>
- ${noteCards(notes)}
+function diaryCalCard(){const logs=loggedDays(),n=new Date(),m0=new Date(Date.UTC(n.getFullYear(),n.getMonth()+diaryCm,1)),ym=m0.getUTCFullYear()+"-"+String(m0.getUTCMonth()+1).padStart(2,"0"),off=m0.getUTCDay(),dim=new Date(Date.UTC(m0.getUTCFullYear(),m0.getUTCMonth()+1,0)).getUTCDate();
+ let h=WK.map(x=>`<div class="h">${x}</div>`).join("")+"<div></div>".repeat(off);
+ for(let i=1;i<=dim;i++){const d=ym+"-"+String(i).padStart(2,"0"),k=["c"];if(d==today())k.push("p");if(logs.has(d))k.push("log");if(d==vd)k.push("sel");h+=`<div class="${k.join(" ")}" onclick="pickDiary('${d}')">${i}</div>`}
+ const count=[...logs].filter(d=>d.startsWith(ym)).length;
+ return `<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="btn ghost sm" onclick="diaryMonth(-1)">‹</button><b>${ym}</b><button class="btn ghost sm" onclick="diaryMonth(1)">›</button></div><div class="cal">${h}</div>
+ <div class="lg"><span><i style="background:var(--rose)"></i>有记载</span><span><i style="background:var(--rose2)"></i>今天</span><span>本月 ${count} 天有记录</span></div>
+ <div class="row" style="margin-top:10px"><button class="btn soft sm" onclick="pickDiary(today())">回到今天</button><input type="date" style="flex:1" value="${vd}" onchange="if(this.value)pickDiary(this.value)"></div>
+ <p class="sub" style="margin:8px 0 0">点日历上的日期查看那天；有粉点表示那天记过事、吃过饭、拍过照或打过卡。</p></div>`}
+function dayRecords(day){const l=S.logs.find(x=>x.d==day)||{},meals=F.filter(x=>x.d==day).sort((a,b)=>a.t<b.t?-1:1),taken=S.meds.filter(m=>m.done[day]),kk=S.kicks.filter(x=>x.d==day),notes=(S.notes||[]).filter(x=>x.d==day),doses=S.doses.filter(x=>x.d==day),bloods=S.bloods.filter(x=>x.d==day),exams=S.exams.filter(x=>x.d==day),ctxs=(S.ctxs||[]).filter(x=>x.d==day),bp=S.bp.filter(x=>x.d==day);
+ const has=notes.length||meals.length||taken.length||kk.length||doses.length||bloods.length||exams.length||ctxs.length||bp.length||l.w||l.mood!=null||l.pain!=null||l.sys||l.wat||l.en!=null||l.ap!=null||(l.sym&&l.sym.length)||l.note;
+ return `${noteCards(notes)}
  ${meals.map(x=>`<div class="card"><div class="row"><span class="tag r">${x.meal}</span><span class="sub">${x.t}</span>${x.pro?`<span class="sub">蛋白≈${x.pro}g</span>`:""}<button class="btn ghost sm sp" onclick="delFood(${x.id})">删除</button></div><p style="margin:8px 0 0">${esc([...(x.foods||[]),x.txt].filter(Boolean).join("、"))}</p>${x.imgs&&x.imgs.length?`<div class="thumbs">${x.imgs.map(i=>`<img src="${i}" onclick="showImg(this.src)">`).join("")}</div>`:""}</div>`).join("")}
+ ${exams.map(e=>`<div class="card"><h2>检查</h2><p style="margin:0"><b>${esc(e.t)}</b></p><p class="sub" style="margin:6px 0 0">${esc(e.r)}</p></div>`).join("")}
  ${kk.length?`<div class="card"><h2>胎动</h2>${kk.map(x=>`<div class="row" style="padding:4px 0"><span>${x.t}</span><b class="sp">${x.n} 次</b></div>`).join("")}</div>`:""}
- ${l.mood!=null||l.en!=null||l.ap!=null||l.pain!=null||l.w||l.wat||l.sys||(l.sym&&l.sym.length)?`<div class="card"><h2>当天状态</h2><div class="row" style="gap:14px">${l.w?`<span>⚖️ ${l.w}kg</span>`:""}${l.sys?`<span>🩺 ${l.sys}/${l.dia}</span>`:""}${[["心情","mood"],["体力","en"],["食欲","ap"]].map(k=>l[k[1]]!=null?`<span>${k[0]} ${EMO[Math.round(l[k[1]]/2)-1]}</span>`:"").join("")}${l.pain!=null?`<span>疼痛 ${l.pain}</span>`:""}${l.sl?`<span>睡眠 ${l.sl}h</span>`:""}${l.wat?`<span>💧 ${l.wat}ml</span>`:""}${l.fh?`<span>宫高 ${l.fh}cm</span>`:""}</div>${l.sym&&l.sym.length?`<div class="row" style="margin-top:8px">${l.sym.map(s=>`<span class="tag a">${s}</span>`).join("")}</div>`:""}${l.note?`<p class="sub">${esc(l.note)}</p>`:""}</div>`:""}
- ${taken.length?`<div class="card"><h2>已服药物</h2>${taken.map(m=>`<div class="row" style="padding:4px 0"><span>${esc(m.n)}</span><span class="sub sp">${typeof m.done[vd]=="string"?m.done[vd]:"✓"}</span></div>`).join("")}</div>`:""}
- ${S.doses.filter(x=>x.d==vd).length?`<div class="card"><h2>用药记录</h2>${S.doses.filter(x=>x.d==vd).map(x=>`<div class="row" style="padding:4px 0"><span>${x.t} ${esc(x.n)}${x.dose?" · "+esc(x.dose):""}</span><button class="btn ghost sm sp" onclick="delDose(${x.id})">删除</button></div>`).join("")}</div>`:""}
- ${S.bloods.filter(x=>x.d==vd).map(b=>`<div class="card"><h2>血化验</h2><p class="sub">${esc(b.hosp||"")}${b.note?" · "+esc(b.note):""}</p>${b.items.map(i=>`<div class="row" style="padding:4px 0"><span>${esc(i.k)}</span><b class="sp">${i.v}${labFlag(i.k,i.v)?" · "+labFlag(i.k,i.v):""}</b></div>`).join("")}</div>`).join("")}
- ${!notes.length&&!meals.length&&!taken.length&&!kk.length&&!(l.w||l.mood!=null||l.pain!=null||l.sys)?`<div class="card"><p class="sub" style="margin:0">这天还没有记录。点下方“＋”补记。</p></div>`:""}`};
+ ${l.mood!=null||l.en!=null||l.ap!=null||l.pain!=null||l.w||l.wat||l.sys||(l.sym&&l.sym.length)||l.note?`<div class="card"><h2>当天状态</h2><div class="row" style="gap:14px">${l.w?`<span>⚖️ ${l.w}kg</span>`:""}${l.sys?`<span>🩺 ${l.sys}/${l.dia}</span>`:""}${[["心情","mood"],["体力","en"],["食欲","ap"]].map(k=>l[k[1]]!=null?`<span>${k[0]} ${EMO[Math.round(l[k[1]]/2)-1]}</span>`:"").join("")}${l.pain!=null?`<span>疼痛 ${l.pain}</span>`:""}${l.sl?`<span>睡眠 ${l.sl}h</span>`:""}${l.wat?`<span>💧 ${l.wat}ml</span>`:""}${l.fh?`<span>宫高 ${l.fh}cm</span>`:""}</div>${l.sym&&l.sym.length?`<div class="row" style="margin-top:8px">${l.sym.map(s=>`<span class="tag a">${s}</span>`).join("")}</div>`:""}${l.note?`<p class="sub">${esc(l.note)}</p>`:""}</div>`:""}
+ ${bp.length&&!l.sys?`<div class="card"><h2>血压</h2>${bp.map(x=>`<div class="row"><span>${x.sys}/${x.dia}</span></div>`).join("")}</div>`:""}
+ ${taken.length?`<div class="card"><h2>已服药物</h2>${taken.map(m=>`<div class="row" style="padding:4px 0"><span>${esc(m.n)}</span><span class="sub sp">${typeof m.done[day]=="string"?m.done[day]:"✓"}</span></div>`).join("")}</div>`:""}
+ ${doses.length?`<div class="card"><h2>用药记录</h2>${doses.map(x=>`<div class="row" style="padding:4px 0"><span>${x.t} ${esc(x.n)}${x.dose?" · "+esc(x.dose):""}</span><button class="btn ghost sm sp" onclick="delDose(${x.id})">删除</button></div>`).join("")}</div>`:""}
+ ${bloods.map(b=>`<div class="card"><h2>血化验</h2><p class="sub">${esc(b.hosp||"")}${b.note?" · "+esc(b.note):""}</p>${b.items.map(i=>`<div class="row" style="padding:4px 0"><span>${esc(i.k)}</span><b class="sp">${i.v}${labFlag(i.k,i.v)?" · "+labFlag(i.k,i.v):""}</b></div>`).join("")}</div>`).join("")}
+ ${ctxs.length?`<div class="card"><h2>宫缩计时</h2>${ctxs.map(x=>`<div class="row" style="padding:4px 0"><span>${x.t}</span><b class="sp">${x.sec} 秒</b></div>`).join("")}</div>`:""}
+ ${has?"":`<div class="card"><p class="sub" style="margin:0">这天还没有记录。点下方“＋”可以补记到 ${day==today()?"今天":day}。</p></div>`}`}
+V.diary=()=>{const strip=Array.from({length:14},(_,i)=>addDays(i-13)),logs=loggedDays();
+ return `<div class="hd"><h1>记录</h1><p>${vd==today()?"今天 · 点日历可回看过往":vd+" · 这一天的记载"}</p></div>
+ ${diaryCalCard()}
+ <div class="strip" id="st">${strip.map(d=>`<div class="dy ${d==vd?"on":""}" onclick="pickDiary('${d}')">周${WK[D(d).getUTCDay()]}<b>${+d.slice(8)}</b>${logs.has(d)&&d!=vd?"<i style='display:block;width:5px;height:5px;border-radius:50%;background:var(--rose);margin:3px auto 0'></i>":""}</div>`).join("")}</div>
+ <div class="card" style="padding:12px 16px"><div class="row"><b style="font-size:17px">${vd==today()?"今天":vd}</b><span class="sub sp">周${WK[D(vd).getUTCDay()]}</span>${logs.has(vd)?`<span class="tag r">有记载</span>`:`<span class="tag">暂无</span>`}</div></div>
+ ${dayRecords(vd)}`};
 function noteCards(list){return (list||[]).map(x=>`<div class="card"><div class="row"><span class="tag">${esc(x.kind||"日常")}</span><span class="sub">${esc(x.t||"")}</span><button class="btn ghost sm sp" onclick="delNote(${x.id})">删除</button></div>${x.title?`<h2 style="margin:8px 0 0">${esc(x.title)}</h2>`:""}${x.text?`<p style="margin:8px 0 0;white-space:pre-wrap">${esc(x.text)}</p>`:""}${x.imgs&&x.imgs.length?`<div class="thumbs">${x.imgs.map(i=>`<img src="${i}" onclick="showImg(this.src)">`).join("")}</div>`:""}</div>`).join("")}
 function noteToday(){const list=(S.notes||[]).filter(x=>x.d==today());return `<div class="card"><div class="row"><h2 style="margin:0">今天的事</h2><button class="btn soft sp" onclick="sheetNote()">＋ 记下</button></div>${list.length?noteCards(list):'<p class="sub" style="margin:0">写下今天发生的事，或放入化验单、超声报告的截图。照片和文字按这一天归档，只存在这台手机里。</p>'}</div>`}
 function sheetNote(){const K=["日常","产检","化验报告","其他"];sheet("记今天的事",`${dayTag()}<p class="sub">写清楚当天发生了什么。化验单、超声或聊天记录，用截图放进来即可。</p><div class="chips">${K.map(k=>`<span class="chip ${nd.kind==k?"on":""}" onclick="nd.kind='${k}';sheetNote()">${k}</span>`).join("")}</div><label class="l">标题</label><input value="${esc(nd.title)}" placeholder="例如 大排畸报告、今天的胎动" oninput="nd.title=this.value"><label class="l">描述</label><textarea rows="4" placeholder="医生原话、报告上的结论，或今天发生的事" oninput="nd.text=this.value">${esc(nd.text)}</textarea><label class="photo" style="margin-top:12px"><input type="file" accept="image/*" multiple onchange="pickNoteImg(this)">📷 拍照、相册或截图</label><div class="thumbs">${nd.imgs.map((s,i)=>`<img src="${s}" onclick="nd.imgs.splice(${i},1);sheetNote()">`).join("")}</div><p class="sub">最多 6 张。点缩略图可去掉。保存后到「记录」里按日期回看。</p><button class="btn big" onclick="saveNote()">保存到这一天</button>`)}
@@ -425,7 +451,7 @@ function cal(){const p=preg(),n=new Date(),m0=new Date(Date.UTC(n.getFullYear(),
  return `<div class="card"><h2>${p.t}</h2><p class="sub" style="margin-top:-6px">${p.s}</p><div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="btn ghost sm" onclick="cm--;render(true)">‹</button><b>${ym}</b><button class="btn ghost sm" onclick="cm++;render(true)">›</button></div><div class="cal">${h}</div>
  <div class="lg"><span><i style="background:var(--rose2)"></i>今天</span><span><i style="background:var(--sage2)"></i>整孕周</span><span><i style="background:var(--sage)"></i>预产期</span><span><i style="background:var(--amb);border-radius:50%"></i>产检/化验</span></div>
  <button class="btn soft" style="margin-top:10px" onclick="sheetPreg()">修改预产期</button></div>
- <div class="card"><h2>${selD}</h2>${onSel.map(a=>`<p>📅 ${esc(a.t)}</p>`).join("")}${ex.map(e=>`<p>🧪 ${esc(e.t)}：${esc(e.r)}</p>`).join("")}${!onSel.length&&!ex.length?'<p class="sub">这天还没有产检记录</p>':""}<p class="sub">孕周按末次月经估算，超声校正后的预产期更准。</p></div>`}
+ <div class="card"><h2>${selD}</h2>${onSel.map(a=>`<p>📅 ${esc(a.t)}</p>`).join("")}${ex.map(e=>`<p>🧪 ${esc(e.t)}：${esc(e.r)}</p>`).join("")}${!onSel.length&&!ex.length?'<p class="sub">这天还没有产检记录</p>':""}<button class="btn soft" style="margin-top:10px" onclick="pickDiary('${selD}');tab='diary';render()">查看这天全部记录</button><p class="sub">孕周按末次月经估算，超声校正后的预产期更准。</p></div>`}
 const AC=(k,t,b)=>`<details class="acc" ${acc.has(k)?"open":""} ontoggle="this.open?acc.add('${k}'):acc.delete('${k}')"><summary>${t}</summary><div class="in">${b}</div></details>`;
 V.me=()=>{const up=S.appt.filter(a=>a.d>=today()).sort((a,b)=>a.d<b.d?-1:1),on=rfOn,u=RF.filter((r,i)=>on(i)&&r[1]).length,dn=RF.filter((r,i)=>on(i)&&!r[1]).length,ph=preg(),w=ph.week,bagN=BAG.filter(x=>S.bag&&S.bag[x]).length,recent=sorted(S.doses).slice(-8).reverse();
  return `<div class="hd"><h1>我的</h1><p>用药、血检、提醒和导出都在这里</p></div>
@@ -578,6 +604,9 @@ async function runFeatureFlow(){
     mark("backup_json",!!parsed.S&&Array.isArray(parsed.F));
 
     go("diary");render(true);
+    const past=addDays(-2);pickDiary(past);
+    mark("ui_diary_calendar",tab==="diary"&&document.body.innerText.includes("有记载")&&document.querySelectorAll(".cal .c").length>=28);
+    mark("ui_diary_pick_day",vd===past&&document.body.innerText.includes(past));
     mark("ui_diary",tab==="diary"&&document.body.innerText.includes("记录"));
     go("trend");seg="bp";render(true);
     mark("ui_trend",tab==="trend"&&document.body.innerText.includes("趋势"));
@@ -621,7 +650,7 @@ async function runFeatureFlow(){
   scheduleReminders();
   if(securePage()&&"serviceWorker"in navigator){
     navigator.serviceWorker.register("sw.js").then(()=>navigator.serviceWorker.ready).then(async()=>{
-      const cache=await caches.open("baobei-v8");
+      const cache=await caches.open("baobei-v9");
       let hit=await cache.match("./")||await cache.match("index.html");
       if(!hit){
         const res=await fetch("index.html",{cache:"reload"});
