@@ -291,13 +291,16 @@ function sheetMed(id){medId=id||null;const m=id?S.meds.find(x=>x.id==id):{n:"",c
  <label class="l">剂量（如 0.4mg / 1片）</label><input id="mdose" value="${esc(m.dose||"")}" placeholder="按医嘱填写">
  <label class="l">频率说明</label><input id="mt" value="${esc(m.t)}" placeholder="例如 每天早餐后">
  <label class="l">每天提醒时间</label><input id="mat" type="time" value="${m.at||""}">
- <div class="item ${m.remind!==false?"done":""}" onclick="this.classList.toggle('done');this.querySelector('.ck').textContent=this.classList.contains('done')?'✓':''" id="mre"><div class="ck">${m.remind!==false?"✓":""}</div><div>到点推送吃药提醒</div></div>
- <p class="sub">处方药请按医嘱服用。</p>
+ <div class="item ${m.remind!==false?"done":""}" onclick="this.classList.toggle('done');this.querySelector('.ck').textContent=this.classList.contains('done')?'✓':''" id="mre"><div class="ck">${m.remind!==false?"✓":""}</div><div>${isNativeApp()?"到点推送吃药提醒":"加入日历后到点闹钟提醒"}</div></div>
+ <p class="sub">${isNativeApp()?"处方药请按医嘱服用。":"主屏幕版需再到「我的」点「把吃药时间加到日历」，iPhone 日历才会闹钟。处方药请按医嘱服用。"}</p>
  <button class="btn big" onclick="saveMed()">保存</button>${id?`<button class="btn big ghost" onclick="delMed()">删除</button>`:""}`)}
+const isNativeApp=()=>!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
 function saveMed(){const n=$("mn").value.trim();if(!n){toast("请填写药物名称");return}const custom=$("mcat")?$("mcat").value.trim():"";const o={n,c:custom||mc||"其他",t:$("mt").value.trim()||"每天",at:$("mat").value,dose:$("mdose").value.trim(),remind:$("mre")&&$("mre").classList.contains("done")};
- if(medId)Object.assign(S.meds.find(x=>x.id==medId),o);else S.meds.push({id:Date.now(),done:{},...o});save();closeSheet();toast(o.at?"已保存，将每天 "+o.at+" 提醒":"已保存");scheduleReminders();render(true)}
+ if(medId)Object.assign(S.meds.find(x=>x.id==medId),o);else S.meds.push({id:Date.now(),done:{},...o});save();closeSheet();
+ const tip=o.at?(isNativeApp()?"已保存，将每天 "+o.at+" 推送提醒":"已保存。请到「我的」→把吃药时间加到日历，才会闹钟提醒"):"已保存";
+ toast(tip);scheduleReminders();render(true)}
 function delMed(){if(confirm("确定删除？")){S.meds=S.meds.filter(x=>x.id!=medId);save();closeSheet();scheduleReminders();render(true)}}
-function addVit(){[["叶酸","叶酸","08:00","0.4mg"],["钙剂 + 维生素D","钙剂","12:30","按医嘱"],["铁剂","铁剂","21:00","按医嘱"]].forEach((x,i)=>S.meds.push({id:Date.now()+i,n:x[0],c:x[1],t:"每天",at:x[2],dose:x[3],remind:true,done:{}}));save();toast("已添加叶酸/钙/铁提醒");scheduleReminders();render(true)}
+function addVit(){[["叶酸","叶酸","08:00","0.4mg"],["钙剂 + 维生素D","钙剂","12:30","按医嘱"],["铁剂","铁剂","21:00","按医嘱"]].forEach((x,i)=>S.meds.push({id:Date.now()+i,n:x[0],c:x[1],t:"每天",at:x[2],dose:x[3],remind:true,done:{}}));save();toast(isNativeApp()?"已添加叶酸/钙/铁提醒":"已添加。请到「我的」把提醒加到日历");scheduleReminders();render(true)}
 function sheetDose(){const list=S.meds;if(!list.length){toast("请先在“我的”添加药物");return}
  sheet("记一次用药",`${dayTag()}<label class="l">药物</label><select id="dsmed">${list.map(m=>`<option value="${m.id}">${esc(m.n)}</option>`).join("")}</select>
  <label class="l">时间</label><input id="dst" type="time" value="${nowT()}">
@@ -348,21 +351,30 @@ async function scheduleReminders(){
  }catch(e){}}
 async function enableReminders(){S.remindOn=true;save();await scheduleReminders();toast("已开启吃药提醒");render(true)}
 const icsEsc=s=>String(s).replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;");
-function shareMedsIcs(){
+function buildMedsIcs(at=new Date()){
   const list=S.meds.filter(m=>m.at&&m.remind!==false);
-  if(!list.length){toast("先给药物填上每天的提醒时间");return}
-  const now=new Date();
+  if(!list.length)return null;
+  const NL="\r\n";
+  const stamp=d=>d.replace(/-/g,"")+"T"+String(at.getHours()).padStart(2,"0")+String(at.getMinutes()).padStart(2,"0")+String(at.getSeconds()).padStart(2,"0");
   const events=list.map(m=>{
     const p=(m.at||"08:00").split(":"),hh=+p[0]||0,mm=+p[1]||0;
-    const passed=now.getHours()>hh||(now.getHours()===hh&&now.getMinutes()>=mm);
-    const start=(passed?plus(today(),1):today()).replace(/-/g,"")+"T"+String(hh).padStart(2,"0")+String(mm).padStart(2,"0")+"00";
-    return `BEGIN:VEVENT\nUID:${m.id}@baobei\nDTSTART:${start}\nRRULE:FREQ=DAILY\nSUMMARY:${icsEsc("宝贝守护 · "+m.n)}\nDESCRIPTION:${icsEsc("该吃"+m.n+(m.dose?"（"+m.dose+"）":""))}\nBEGIN:VALARM\nTRIGGER:PT0S\nACTION:DISPLAY\nDESCRIPTION:${icsEsc("该吃"+m.n)}\nEND:VALARM\nEND:VEVENT`;
-  }).join("\n");
-  const ics=`BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//baobei//cn//\nCALSCALE:GREGORIAN\n${events}\nEND:VCALENDAR\n`;
-  const file=new File([ics],"宝贝守护吃药提醒.ics",{type:"text/calendar"});
-  if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:"吃药提醒"}).catch(e=>{if(!e||e.name!=="AbortError")downloadBlob(new Blob([ics],{type:"text/calendar"}),"宝贝守护吃药提醒.ics")});return}
-  downloadBlob(new Blob([ics],{type:"text/calendar"}),"宝贝守护吃药提醒.ics");
-  toast("已生成日历文件，打开后添加到日历");
+    const passed=at.getHours()>hh||(at.getHours()===hh&&at.getMinutes()>=mm);
+    const day=(passed?plus(today(),1):today()).replace(/-/g,"");
+    const start=day+"T"+String(hh).padStart(2,"0")+String(mm).padStart(2,"0")+"00";
+    const endMin=hh*60+mm+15,eh=Math.floor(endMin/60)%24,em=endMin%60;
+    const end=day+"T"+String(eh).padStart(2,"0")+String(em).padStart(2,"0")+"00";
+    return ["BEGIN:VEVENT","UID:"+m.id+"@baobei-shouhu","DTSTAMP:"+stamp(today()),"DTSTART:"+start,"DTEND:"+end,"RRULE:FREQ=DAILY","SUMMARY:"+icsEsc("宝贝守护 · "+m.n),"DESCRIPTION:"+icsEsc("该吃"+m.n+(m.dose?"（"+m.dose+"）":"")),"BEGIN:VALARM","TRIGGER:-PT0M","ACTION:DISPLAY","DESCRIPTION:"+icsEsc("该吃"+m.n),"END:VALARM","END:VEVENT"].join(NL);
+  }).join(NL);
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//baobei-shouhu//CN","CALSCALE:GREGORIAN","METHOD:PUBLISH","X-WR-CALNAME:"+icsEsc("宝贝守护吃药提醒"),events,"END:VCALENDAR",""].join(NL);
+  return{list,ics,name:"宝贝守护吃药提醒.ics"};
+}
+function shareMedsIcs(){
+  const built=buildMedsIcs();
+  if(!built){toast("先给药物填上每天的提醒时间");return}
+  const file=new File([built.ics],built.name,{type:"text/calendar"});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:"吃药提醒"}).catch(e=>{if(!e||e.name!=="AbortError")downloadBlob(new Blob([built.ics],{type:"text/calendar"}),built.name)});return}
+  downloadBlob(new Blob([built.ics],{type:"text/calendar"}),built.name);
+  toast("已生成日历文件，打开后添加到日历，闹钟才会响");
 }
 function doseTxt(){return sorted(S.doses).slice(-30).map(x=>`${x.d} ${x.t} ${x.n}${x.dose?" "+x.dose:""}${x.note?" "+x.note:""}`).join("\n")||"暂无"}
 function bloodTxt(){return sorted(S.bloods).map(b=>`${b.d} ${b.hosp||""}\n`+b.items.map(i=>`  ${i.k} ${i.v}${LAB[i.k]?LAB[i.k][0]:""}${labFlag(i.k,i.v)?" "+labFlag(i.k,i.v):""}`).join("\n")+(b.note?"\n  "+b.note:"")).join("\n")||"暂无"}
@@ -499,6 +511,87 @@ function hydrate(stateRaw,foodRaw){
   if(!S||cancer){S=demo();fresh=true;F=[{id:1,d:today(),t:"08:10",meal:"早餐",txt:"小米粥半碗、蒸蛋（示例）",foods:["鸡蛋","杂粮主食"],pro:10,imgs:[]}]}
   ["exams","meds","reacts","intol","logs","appt","labs","kicks","bp","doses","bloods","ctxs","notes"].forEach(k=>S[k]=S[k]||[]);S.risk=S.risk||{};S.preg=S.preg||{lmp:"",due:"",name:""};S.bag=S.bag||{};if(S.remindOn==null)S.remindOn=true;
 }
+async function runFeatureFlow(){
+  const out=[],mark=(name,pass,detail="")=>out.push({name,pass:!!pass,detail:String(detail||"")});
+  const snap={S:JSON.stringify(S),F:JSON.stringify(F),tab,vd,seg};
+  const restore=()=>{try{S=JSON.parse(snap.S);F=JSON.parse(snap.F)}catch(e){}tab=snap.tab;vd=snap.vd;seg=snap.seg;save();saveF();closeSheet();render(true)};
+  try{
+    mark("boot",!!S&&Array.isArray(F)&&!booting,"S/F ready");
+    mark("storage_idb_or_sqlite",!!(idb||dbReady),idb?"IndexedDB":dbReady?"SQLite":"localStorage only");
+    mark("save_roundtrip",(()=>{const k="__flow_"+Date.now();S.notes=S.notes||[];S.notes.push({id:k,d:today(),t:nowT(),kind:"日常",title:"flow-tmp",text:"x",imgs:[]});const ok=save();S.notes=S.notes.filter(x=>x.id!==k);save();return ok})(),"save() boolean");
+
+    const c=document.createElement("canvas");c.width=120;c.height=80;c.getContext("2d").fillStyle="#D4688A";c.getContext("2d").fillRect(0,0,120,80);
+    const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.85));
+    const img=await comp(new File([blob],"flow.jpg",{type:"image/jpeg"}));
+    mark("photo_compress",!!img&&img.indexOf("data:image/jpeg")==0,(img||"").length+" bytes");
+    mark("photo_bad_silent_safe",(await comp(new File([new Uint8Array([1,2,3])],"bad.heic",{type:"image/heic"})))===null,"bad file -> null");
+
+    const nid="n"+Date.now();
+    S.notes=S.notes||[];S.notes.push({id:nid,d:today(),t:nowT(),kind:"化验报告",title:"flow笔记",text:"测试",imgs:img?[img]:[]});
+    mark("note_save",save()&&(S.notes||[]).some(x=>x.id===nid&&x.imgs&&x.imgs.length===1),"note+img");
+    const fid="f"+Date.now();
+    F.push({id:fid,d:today(),t:nowT(),meal:"午餐",txt:"flow餐",foods:["鸡蛋"],pro:6,imgs:img?[img]:[]});
+    mark("meal_save",saveF()&&F.some(x=>x.id===fid&&x.imgs&&x.imgs.length===1),"meal+img");
+
+    const w0=(TL().wat||0);water();mark("water",TL().wat===w0+200,String(TL().wat));
+    TL().w=58.8;TL().mood=8;TL().en=6;TL().ap=6;TL().pain=0;TL().sym=["烧心"];save();
+    mark("daily_state",TL().w===58.8&&TL().mood===8&&(TL().sym||[]).includes("烧心"));
+
+    const kn=S.kicks.length;S.kicks.push({d:today(),t:nowT(),n:11});save();
+    mark("kick",S.kicks.length===kn+1);
+    const bd=today();S.bp=S.bp.filter(x=>x.d!==bd);S.bp.push({d:bd,sys:118,dia:72});TL(bd).sys=118;TL(bd).dia=72;save();
+    mark("bp",S.bp.some(x=>x.d===bd&&x.sys===118));
+
+    const mid="m"+Date.now();
+    S.meds.push({id:mid,n:"flow叶酸",c:"叶酸",t:"每天",at:"08:05",dose:"0.4mg",remind:true,done:{}});
+    save();
+    mark("med_add",S.meds.some(x=>x.id===mid&&x.at==="08:05"));
+    tick(mid);
+    mark("med_tick",!!S.meds.find(x=>x.id===mid).done[today()]&&S.doses.some(x=>x.mid===mid&&x.d===today()));
+    await scheduleReminders();
+    mark("remind_schedule_pwa",!isNativeApp(),"PWA 无 Capacitor 推送，走日历");
+    const ics=buildMedsIcs(new Date(2000,0,1,7,0,0));
+    mark("ics_build",!!ics&&ics.list.some(m=>m.id===mid),ics?ics.list.length+" events":"empty");
+    mark("ics_format",!!ics&&/BEGIN:VCALENDAR/.test(ics.ics)&&/BEGIN:VALARM/.test(ics.ics)&&/RRULE:FREQ=DAILY/.test(ics.ics)&&/DTSTART:\d{8}T080500/.test(ics.ics)&&/\r\n/.test(ics.ics),"CRLF+VALARM+RRULE");
+    mark("ics_alarm_trigger",!!ics&&/TRIGGER:-PT0M/.test(ics.ics));
+
+    const bid="b"+Date.now();
+    S.labs.push({d:today(),k:"血红蛋白",v:115});
+    S.bloods.push({id:bid,d:today(),hosp:"flow医院",note:"空腹",items:[{k:"血红蛋白",v:115}]});
+    save();
+    mark("blood",S.bloods.some(x=>x.id===bid)&&labFlag("血红蛋白",100)==="偏低");
+
+    const cx=S.ctxs.length;S.ctxs.push({d:today(),t:nowT(),sec:42});save();
+    mark("contraction",S.ctxs.length===cx+1);
+    const aid="a"+Date.now();S.appt.push({id:aid,d:addDays(3),t:"flow产检"});save();
+    mark("appt",S.appt.some(x=>x.id===aid));
+    S.intol.push("flow过敏：测试");save();
+    mark("intol",S.intol.includes("flow过敏：测试"));
+    S.bag=S.bag||{};S.bag["充电器/充电宝"]=true;save();
+    mark("bag",!!S.bag["充电器/充电宝"]);
+
+    const pr=preg();mark("preg",pr.week!=null&&!!pr.due,pr.t);
+    mark("alerts",Array.isArray(alerts()));
+    mark("signals",sig().length>=1);
+    const bak=JSON.stringify({v:1,exported:today(),S,F});
+    const parsed=JSON.parse(bak);
+    mark("backup_json",!!parsed.S&&Array.isArray(parsed.F));
+
+    go("diary");render(true);
+    mark("ui_diary",tab==="diary"&&document.body.innerText.includes("记录"));
+    go("trend");seg="bp";render(true);
+    mark("ui_trend",tab==="trend"&&document.body.innerText.includes("趋势"));
+    go("me");acc.add("med");render(true);
+    mark("ui_me_calendar_cta",tab==="me"&&(isNativeApp()||document.body.innerText.includes("把吃药时间加到日历")));
+    go("today");render(true);
+    mark("ui_today",tab==="today");
+
+    mark("note_visible_after_render",(S.notes||[]).some(x=>x.id===nid&&x.imgs&&x.imgs[0]&&x.imgs[0].indexOf("data:image")==0));
+  }catch(e){mark("flow_exception",false,e&&e.message||e)}
+  restore();
+  const failed=out.filter(x=>!x.pass);
+  return{ok:!failed.length,total:out.length,failed:failed.length,results:out,remindMode:isNativeApp()?"native-push":"ios-calendar-ics"};
+}
 (async()=>{
   let stateRaw=lsGet(LS),foodRaw=lsGet(LSF);
   try{
@@ -522,11 +615,13 @@ function hydrate(stateRaw,foodRaw){
   if(!fresh){const m=bakMeta();if(!m.start){m.start=today();setBakMeta(m)}}
   if(dbReady||idb){save();saveF()}
   booting=false;
+  window.runFeatureFlow=runFeatureFlow;
+  window.__baobeiReady=true;
   render();
   scheduleReminders();
   if(securePage()&&"serviceWorker"in navigator){
     navigator.serviceWorker.register("sw.js").then(()=>navigator.serviceWorker.ready).then(async()=>{
-      const cache=await caches.open("baobei-v7");
+      const cache=await caches.open("baobei-v8");
       let hit=await cache.match("./")||await cache.match("index.html");
       if(!hit){
         const res=await fetch("index.html",{cache:"reload"});

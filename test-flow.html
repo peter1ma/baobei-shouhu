@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>宝贝守护 · 全功能测试 Flow</title>
+<style>
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;background:#FBF4F2;color:#3B2D33;padding:20px}
+h1{font-size:22px;margin:0 0 8px}
+.sub{color:#8C7B82;font-size:13px;margin:0 0 16px}
+.card{background:#fff;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 4px 18px rgba(180,110,130,.12)}
+.ok{color:#2f7a58}.bad{color:#C8485A}
+button{border:0;border-radius:99px;padding:12px 18px;background:#D4688A;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+pre{white-space:pre-wrap;font-size:13px;background:#FBF4F2;padding:12px;border-radius:12px;overflow:auto}
+iframe{width:100%;height:420px;border:1px solid #F0E3E2;border-radius:16px;background:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+</style>
+</head>
+<body>
+<h1>全功能测试 Flow</h1>
+<p class="sub">在 iframe 里加载正式应用并自动跑一遍核心功能。通过后才建议同步 GitHub。</p>
+<div class="row">
+  <button id="run">开始测试</button>
+  <span id="sum" class="sub">等待开始…</span>
+</div>
+<div class="card"><div id="list">点击「开始测试」</div></div>
+<div class="card"><h2 style="margin:0 0 8px;font-size:16px">应用预览</h2><iframe id="app" src="./index.html?flow=1" title="app"></iframe></div>
+<pre id="raw"></pre>
+<script>
+const $=id=>document.getElementById(id);
+async function waitReady(w,ms=15000){
+  const t0=Date.now();
+  while(Date.now()-t0<ms){
+    try{if(w&&w.__baobeiReady&&typeof w.runFeatureFlow==="function")return true}catch(e){}
+    await new Promise(r=>setTimeout(r,150));
+  }
+  return false;
+}
+async function run(){
+  $("sum").textContent="运行中…";
+  $("list").innerHTML="";
+  const frame=$("app");
+  frame.src="./index.html?flow="+Date.now();
+  await new Promise(r=>frame.onload=r);
+  const w=frame.contentWindow;
+  const ready=await waitReady(w);
+  if(!ready){$("sum").innerHTML='<span class="bad">应用未就绪</span>';return}
+  const report=await w.runFeatureFlow();
+  $("sum").innerHTML=report.ok
+    ?`<span class="ok">全部通过 ${report.total}/${report.total}</span> · 提醒模式：${report.remindMode}`
+    :`<span class="bad">失败 ${report.failed}/${report.total}</span> · 提醒模式：${report.remindMode}`;
+  $("list").innerHTML=report.results.map(r=>`<div class="${r.pass?"ok":"bad"}">${r.pass?"✓":"✗"} ${r.name}${r.detail?" — "+r.detail:""}</div>`).join("");
+  $("raw").textContent=JSON.stringify(report,null,2);
+  window.__flowReport=report;
+}
+$("run").onclick=run;
+if(location.search.includes("autorun=1"))window.addEventListener("load",()=>setTimeout(run,300));
+</script>
+</body>
+</html>
